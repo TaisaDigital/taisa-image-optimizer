@@ -1,0 +1,166 @@
+.taisa-imgopt-wrap {
+    max-width: 1180px;
+}
+
+.taisa-imgopt-grid {
+    display: grid;
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+    gap: 16px;
+    margin: 16px 0;
+}
+
+.taisa-imgopt-card {
+    background: #fff;
+    border: 1px solid #dcdcde;
+    border-radius: 8px;
+    margin: 16px 0;
+    padding: 16px 18px;
+}
+
+.taisa-imgopt-card h2 {
+    margin: 0 0 10px;
+}
+
+.taisa-imgopt-card p {
+    color: #50575e;
+    margin: 0 0 12px;
+}
+
+.taisa-imgopt-actions {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 8px;
+}
+
+.taisa-imgopt-progress {
+    background: #f6f7f7;
+    border: 1px solid #dcdcde;
+    border-radius: 8px;
+    color: #1d2327;
+    display: none;
+    margin-top: 14px;
+    min-height: 20px;
+    padding: 10px 12px;
+}
+
+.taisa-imgopt-progress.is-active {
+    display: block;
+}
+
+.taisa-imgopt-progress-bar {
+    background: #dcdcde;
+    border-radius: 999px;
+    height: 8px;
+    margin-top: 8px;
+    overflow: hidden;
+}
+
+.taisa-imgopt-progress-bar span {
+    background: #2271b1;
+    display: block;
+    height: 100%;
+    transition: width .2s ease;
+    width: 0;
+}
+
+.taisa-imgopt-confirm {
+    display: block;
+    margin: 12px 0 8px;
+}
+
+.taisa-imgopt-summary {
+    display: grid;
+    gap: 12px;
+    grid-template-columns: repeat(5, minmax(0, 1fr));
+    margin: 16px 0;
+}
+
+.taisa-imgopt-summary div {
+    background: #fff;
+    border: 1px solid #dcdcde;
+    border-radius: 8px;
+    padding: 14px;
+}
+
+.taisa-imgopt-summary strong {
+    display: block;
+    font-size: 22px;
+    line-height: 1.2;
+}
+
+.taisa-imgopt-summary span {
+    color: #646970;
+    display: block;
+    font-size: 12px;
+    margin-top: 4px;
+}
+
+.taisa-imgopt-settings-grid {
+    display: grid;
+    gap: 14px;
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+}
+
+.taisa-imgopt-settings-grid label {
+    display: grid;
+    gap: 5px;
+}
+
+.taisa-imgopt-settings-grid input[type="number"] {
+    max-width: 180px;
+}
+
+.taisa-imgopt-size-table code {
+    font-size: 12px;
+}
+
+.taisa-imgopt-badge {
+    border-radius: 999px;
+    display: inline-block;
+    font-size: 11px;
+    font-weight: 600;
+    line-height: 1;
+    margin-left: 4px;
+    padding: 4px 7px;
+    vertical-align: middle;
+}
+
+.taisa-imgopt-badge.ok {
+    background: #edfaef;
+    color: #0a6b25;
+}
+
+.taisa-imgopt-badge.warning {
+    background: #fcf0c8;
+    color: #7a5600;
+}
+
+.taisa-imgopt-badge.muted {
+    background: #f0f0f1;
+    color: #50575e;
+}
+
+.taisa-imgopt-sources {
+    margin-top: 6px;
+}
+
+.taisa-imgopt-sources summary {
+    cursor: pointer;
+}
+
+.taisa-imgopt-sources ul {
+    margin: 6px 0 0 16px;
+}
+
+.taisa-imgopt-report p:last-child {
+    margin-bottom: 0;
+}
+
+@media (max-width: 900px) {
+    .taisa-imgopt-grid,
+    .taisa-imgopt-summary,
+    .taisa-imgopt-settings-grid {
+        grid-template-columns: 1fr;
+    }
+}
+
