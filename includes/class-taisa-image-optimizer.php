@@ -19,6 +19,8 @@ class Taisa_Image_Optimizer {
     const BACKUP_META = '_taisa_imgopt_backup_file';
 
     public static function init() {
+        // Use the same saved size policy as Taisa Tools without replacing an older installation.
+        add_filter( 'intermediate_image_sizes_advanced', array( __CLASS__, 'filter_generated_sizes' ), 999 );
         if ( is_admin() ) {
             add_action( 'admin_menu', array( __CLASS__, 'register_admin_page' ) );
             add_action( 'admin_enqueue_scripts', array( __CLASS__, 'enqueue_admin_assets' ) );
@@ -130,12 +132,21 @@ class Taisa_Image_Optimizer {
         return is_array( $disabled ) ? self::sanitize_size_names( $disabled ) : array();
     }
 
+    public static function filter_generated_sizes( $sizes ) {
+        foreach ( self::get_disabled_image_sizes() as $name ) {
+            unset( $sizes[ $name ] );
+        }
+        return $sizes;
+    }
+
     public static function render_admin_page() {
         if ( ! current_user_can( 'manage_options' ) ) {
             wp_die( esc_html__( 'No tienes permisos suficientes.', 'taisa-image-optimizer' ) );
         }
 
         self::handle_settings_post();
+        self::handle_media_policy_post();
+        self::handle_single_cleanup_post();
         settings_errors( 'taisa_imgopt' );
 
         $settings = self::get_settings();
@@ -164,12 +175,12 @@ class Taisa_Image_Optimizer {
 
                 <div class="taisa-imgopt-card">
                     <h2><?php echo esc_html__( 'Acciones seguras', 'taisa-image-optimizer' ); ?></h2>
-                    <p><?php echo esc_html__( 'Estas acciones modifican archivos. Revisa los resultados del escaneo antes de ejecutarlas.', 'taisa-image-optimizer' ); ?></p>
+                    <p><?php echo esc_html__( 'Estas acciones modifican archivos. Revisa los resultados del escaneo antes de ejecutarlas. El favicon y el icono del sitio están protegidos.', 'taisa-image-optimizer' ); ?></p>
                     <label class="taisa-imgopt-confirm">
                         <input type="checkbox" id="taisa-confirm-cleanup">
                         <?php echo esc_html__( 'Confirmo que quiero borrar derivados de tamanos desactivados.', 'taisa-image-optimizer' ); ?>
                     </label>
-                    <button type="button" class="button button-secondary" data-taisa-action="cleanup-disabled"><?php echo esc_html__( 'Borrar derivados de tamaños desactivados en Taisa Tools', 'taisa-image-optimizer' ); ?></button>
+                    <button type="button" class="button button-secondary" data-taisa-action="cleanup-disabled"><?php echo esc_html__( 'Borrar derivados de tamaños desactivados', 'taisa-image-optimizer' ); ?></button>
 
                     <label class="taisa-imgopt-confirm">
                         <input type="checkbox" id="taisa-confirm-resize">
@@ -188,7 +199,7 @@ class Taisa_Image_Optimizer {
 
                 <div class="taisa-imgopt-card">
                     <h2><?php echo esc_html__( 'Tamanos de medios', 'taisa-image-optimizer' ); ?></h2>
-                    <p><?php echo esc_html__( 'La configuración de generación se gestiona en Ajustes > Taisa Tools. Aquí puedes revisar los archivos generados y el uso detectado antes de limpiar derivados.', 'taisa-image-optimizer' ); ?></p>
+                    <p><?php echo esc_html__( 'Revisa los archivos generados y el uso detectado antes de limpiar derivados. La configuración de tamaños futuros aparece más abajo.', 'taisa-image-optimizer' ); ?></p>
                     <?php self::render_sizes_table( $sizes, $settings, $size_stats, $usage_stats ); ?>
                 </div>
 
@@ -224,6 +235,31 @@ class Taisa_Image_Optimizer {
                     <a class="button" href="<?php echo esc_url( admin_url( 'upload.php?mode=list&taisa_imgopt_usage_filter=used' ) ); ?>"><?php echo esc_html__( 'Ver imagenes usadas en Medios', 'taisa-image-optimizer' ); ?></a>
                 </p>
             </form>
+
+            <div class="taisa-imgopt-card">
+                <h2><?php echo esc_html__( 'Generación futura de variantes', 'taisa-image-optimizer' ); ?></h2>
+                <p><?php echo esc_html__( 'Desmarca los tamaños que no quieras crear en nuevas subidas. La miniatura de catálogo puede conservarse.', 'taisa-image-optimizer' ); ?></p>
+                <form method="post">
+                    <?php wp_nonce_field( 'taisa_imgopt_media_policy', 'taisa_imgopt_media_nonce' ); ?>
+                    <input type="hidden" name="taisa_imgopt_action" value="save_media_policy">
+                    <?php foreach ( get_intermediate_image_sizes() as $name ) : ?>
+                        <label style="display:block"><input type="checkbox" name="enabled_sizes[]" value="<?php echo esc_attr( $name ); ?>" <?php checked( ! in_array( $name, self::get_disabled_image_sizes(), true ) ); ?>> <?php echo esc_html( $name ); ?></label>
+                    <?php endforeach; ?>
+                    <p><button type="submit" class="button button-primary"><?php echo esc_html__( 'Guardar tamaños futuros', 'taisa-image-optimizer' ); ?></button></p>
+                </form>
+            </div>
+
+            <div class="taisa-imgopt-card">
+                <h2><?php echo esc_html__( 'Prueba con una imagen', 'taisa-image-optimizer' ); ?></h2>
+                <p><?php echo esc_html__( 'Borra una sola variante registrada y actualiza sus metadatos. La imagen original se conserva.', 'taisa-image-optimizer' ); ?></p>
+                <form method="post">
+                    <?php wp_nonce_field( 'taisa_imgopt_single_cleanup', 'taisa_imgopt_single_nonce' ); ?>
+                    <input type="hidden" name="taisa_imgopt_action" value="delete_single_size">
+                    <label><?php echo esc_html__( 'ID del medio', 'taisa-image-optimizer' ); ?> <input type="number" min="1" name="attachment_id" required></label>
+                    <label><?php echo esc_html__( 'Nombre del tamaño', 'taisa-image-optimizer' ); ?> <input type="text" name="size_name" required></label>
+                    <p><button type="submit" class="button button-secondary"><?php echo esc_html__( 'Borrar solo esta variante', 'taisa-image-optimizer' ); ?></button></p>
+                </form>
+            </div>
         </div>
         <?php
     }
@@ -298,6 +334,43 @@ class Taisa_Image_Optimizer {
 
         update_option( self::SETTINGS_OPTION, $settings, false );
         add_settings_error( 'taisa_imgopt', 'saved', __( 'Ajustes guardados.', 'taisa-image-optimizer' ), 'updated' );
+    }
+
+    private static function handle_media_policy_post() {
+        if ( ! isset( $_POST['taisa_imgopt_action'] ) || 'save_media_policy' !== sanitize_key( wp_unslash( $_POST['taisa_imgopt_action'] ) ) ) {
+            return;
+        }
+        if ( ! current_user_can( 'manage_options' ) || empty( $_POST['taisa_imgopt_media_nonce'] ) || ! wp_verify_nonce( sanitize_text_field( wp_unslash( $_POST['taisa_imgopt_media_nonce'] ) ), 'taisa_imgopt_media_policy' ) ) {
+            add_settings_error( 'taisa_imgopt', 'media_denied', __( 'No se pudo guardar la configuración de tamaños.', 'taisa-image-optimizer' ), 'error' );
+            return;
+        }
+        $registered = get_intermediate_image_sizes();
+        $enabled = isset( $_POST['enabled_sizes'] ) ? array_map( 'sanitize_key', (array) wp_unslash( $_POST['enabled_sizes'] ) ) : array();
+        update_option( 'taisa_tools_disabled_image_sizes', array_values( array_diff( $registered, $enabled ) ), false );
+        add_settings_error( 'taisa_imgopt', 'media_saved', __( 'Tamaños futuros actualizados.', 'taisa-image-optimizer' ), 'updated' );
+    }
+
+    private static function handle_single_cleanup_post() {
+        if ( ! isset( $_POST['taisa_imgopt_action'] ) || 'delete_single_size' !== sanitize_key( wp_unslash( $_POST['taisa_imgopt_action'] ) ) ) {
+            return;
+        }
+        if ( ! current_user_can( 'manage_options' ) || empty( $_POST['taisa_imgopt_single_nonce'] ) || ! wp_verify_nonce( sanitize_text_field( wp_unslash( $_POST['taisa_imgopt_single_nonce'] ) ), 'taisa_imgopt_single_cleanup' ) ) {
+            add_settings_error( 'taisa_imgopt', 'single_denied', __( 'No se pudo autorizar la limpieza individual.', 'taisa-image-optimizer' ), 'error' );
+            return;
+        }
+        $attachment_id = isset( $_POST['attachment_id'] ) ? absint( $_POST['attachment_id'] ) : 0;
+        if ( self::is_protected_favicon_attachment( $attachment_id ) ) {
+            add_settings_error( 'taisa_imgopt', 'single_protected', __( 'No se puede borrar una variante del favicon o icono del sitio protegido.', 'taisa-image-optimizer' ), 'error' );
+            return;
+        }
+        $size_name = isset( $_POST['size_name'] ) ? sanitize_key( wp_unslash( $_POST['size_name'] ) ) : '';
+        $metadata = $attachment_id ? wp_get_attachment_metadata( $attachment_id ) : array();
+        if ( 'attachment' !== get_post_type( $attachment_id ) || ! wp_attachment_is_image( $attachment_id ) || empty( $metadata['sizes'][ $size_name ] ) ) {
+            add_settings_error( 'taisa_imgopt', 'single_missing', __( 'No existe esa variante registrada para el medio indicado.', 'taisa-image-optimizer' ), 'error' );
+            return;
+        }
+        $result = self::delete_disabled_derivatives( $attachment_id, array( $size_name ) );
+        add_settings_error( 'taisa_imgopt', 'single_result', sprintf( __( 'Prueba: %1$d archivo borrado, %2$d referencia conservada, %3$d errores.', 'taisa-image-optimizer' ), $result['deleted'], $result['retained'], $result['errors'] ), $result['errors'] ? 'error' : 'updated' );
     }
 
     private static function render_summary_cards( $size_stats, $usage_stats, $large_stats, $cleanup_report, $resize_report ) {
@@ -376,7 +449,7 @@ class Taisa_Image_Optimizer {
                     $used_frontend = absint( $row_usage['frontend'] ?? 0 );
                     ?>
                     <tr>
-                        <td><?php echo in_array( $name, $disabled, true ) ? esc_html__( 'Desactivado en Taisa Tools', 'taisa-image-optimizer' ) : esc_html__( 'Activo en Taisa Tools', 'taisa-image-optimizer' ); ?></td>
+                        <td><?php echo in_array( $name, $disabled, true ) ? esc_html__( 'Desactivado', 'taisa-image-optimizer' ) : esc_html__( 'Activo', 'taisa-image-optimizer' ); ?></td>
                         <td>
                             <code><?php echo esc_html( $name ); ?></code>
                         </td>
@@ -847,7 +920,7 @@ class Taisa_Image_Optimizer {
         self::ajax_guard();
 
         if ( empty( self::get_disabled_image_sizes() ) ) {
-            wp_send_json_error( array( 'message' => __( 'No hay tamaños desactivados en Taisa Tools. Configúralos en Ajustes > Taisa Tools.', 'taisa-image-optimizer' ) ) );
+            wp_send_json_error( array( 'message' => __( 'No hay tamaños desactivados. Configúralos en esta pantalla antes de limpiar.', 'taisa-image-optimizer' ) ) );
         }
 
         $total = self::count_image_attachments();
@@ -1250,6 +1323,11 @@ class Taisa_Image_Optimizer {
             'message'    => '',
         );
 
+        if ( self::is_protected_favicon_attachment( $attachment_id ) ) {
+            $result['message'] = __( 'Icono del sitio protegido; se omite.', 'taisa-image-optimizer' );
+            return $result;
+        }
+
         if ( ! $file || ! file_exists( $file ) || ! self::is_path_in_uploads( $file ) ) {
             $result['message'] = __( 'Archivo no encontrado.', 'taisa-image-optimizer' );
             return $result;
@@ -1296,6 +1374,10 @@ class Taisa_Image_Optimizer {
             'bytes'    => 0,
             'errors'   => 0,
         );
+        if ( self::is_protected_favicon_attachment( $attachment_id ) ) {
+            $result['protected'] = 1;
+            return $result;
+        }
         $file = get_attached_file( $attachment_id );
         $metadata = wp_get_attachment_metadata( $attachment_id );
 
@@ -1304,6 +1386,7 @@ class Taisa_Image_Optimizer {
         }
 
         $changed = false;
+        $files_to_delete = array();
         foreach ( $disabled_sizes as $size_name ) {
             if ( empty( $metadata['sizes'][ $size_name ] ) ) {
                 continue;
@@ -1328,27 +1411,55 @@ class Taisa_Image_Optimizer {
                 continue;
             }
 
-            if ( $path && file_exists( $path ) && self::is_path_in_uploads( $path ) ) {
-                $file_size = (int) filesize( $path );
-                if ( wp_delete_file( $path ) || ! file_exists( $path ) ) {
-                    $result['deleted']++;
-                    $result['bytes'] += $file_size;
-                    unset( $metadata['sizes'][ $size_name ] );
-                    $changed = true;
-                } else {
-                    $result['errors']++;
-                }
-            } else {
+            if ( $path && file_exists( $path ) && self::is_path_in_uploads( $path ) && realpath( $path ) !== realpath( $file ) ) {
+                $files_to_delete[ $path ] = (int) filesize( $path );
                 unset( $metadata['sizes'][ $size_name ] );
                 $changed = true;
+            } elseif ( ! $path || ! file_exists( $path ) ) {
+                unset( $metadata['sizes'][ $size_name ] );
+                $changed = true;
+            } else {
+                $result['errors']++;
             }
         }
 
         if ( $changed ) {
-            wp_update_attachment_metadata( $attachment_id, $metadata );
+            if ( ! wp_update_attachment_metadata( $attachment_id, $metadata ) ) {
+                $result['errors'] += count( $files_to_delete );
+                return $result;
+            }
+            // Once WordPress falls back to the original, physical files can be removed.
+            foreach ( $files_to_delete as $path => $file_size ) {
+                wp_delete_file( $path );
+                if ( ! file_exists( $path ) ) {
+                    $result['deleted']++;
+                    $result['bytes'] += $file_size;
+                } else {
+                    $result['errors']++;
+                }
+            }
         }
 
         return $result;
+    }
+
+    /** Protect the WordPress Site Icon and favicon-named attachments from all destructive optimizer actions. */
+    private static function is_protected_favicon_attachment( $attachment_id ) {
+        $attachment_id = absint( $attachment_id );
+        if ( ! $attachment_id ) {
+            return false;
+        }
+
+        if ( $attachment_id === absint( get_option( 'site_icon', 0 ) ) ) {
+            return true;
+        }
+
+        if ( 'site-icon' === get_post_meta( $attachment_id, '_wp_attachment_context', true ) ) {
+            return true;
+        }
+
+        $file = get_attached_file( $attachment_id );
+        return $file && false !== stripos( wp_basename( $file ), 'favicon' );
     }
 
     private static function resize_large_attachment( $attachment_id, $settings ) {
@@ -1358,6 +1469,11 @@ class Taisa_Image_Optimizer {
             'success' => false,
             'message' => '',
         );
+
+        if ( self::is_protected_favicon_attachment( $attachment_id ) ) {
+            $result['message'] = __( 'Icono del sitio protegido; no se redimensiona.', 'taisa-image-optimizer' );
+            return $result;
+        }
 
         if ( ! $file || ! file_exists( $file ) || ! self::is_path_in_uploads( $file ) ) {
             $result['message'] = __( 'Archivo no encontrado.', 'taisa-image-optimizer' );
