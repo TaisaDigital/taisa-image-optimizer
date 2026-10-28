@@ -58,8 +58,9 @@
         var offset = 0;
         var total = 0;
         var limit = options.limit || 20;
+        var stopped = false;
 
-        ajax(options.prepareAction)
+        (options.prepareAction ? ajax(options.prepareAction) : $.Deferred().resolve({ success: true, data: { total: 1, limit: 5 } }).promise())
             .done(function (response) {
                 if (!response.success) {
                     deferred.reject(response);
@@ -81,6 +82,7 @@
             });
 
         function tick() {
+            if (stopped) { return; }
             ajax(options.batchAction, {
                 offset: offset,
                 limit: limit
@@ -101,15 +103,73 @@
                         return;
                     }
 
-                    tick();
+                    if (options.singleStep) { options.onBatch(response.data); return; }
+                    setTimeout(tick, options.delay || 0);
                 })
                 .fail(function (response) {
                     deferred.reject(response);
                 });
         }
 
-        return deferred.promise();
+        var promise = deferred.promise();
+        promise.pause = function () { stopped = true; };
+        promise.resume = function () { stopped = false; tick(); };
+        promise.isPaused = function () { return stopped; };
+        return promise;
     }
+
+    var cleanupRun = null;
+    function cleanupProgress(data) {
+        var done = parseInt(data.cursor, 10) || 0;
+        var total = parseInt(data.total, 10) || 0;
+        setProgress('Objetivo: ' + (data.target || (data.disabled || []).join(', ')) + '. Adjuntos procesados: ' + done + '/' + total + '; borrados: ' + (data.deleted || 0) + '; referencias compartidas conservadas: ' + (data.retained || 0) + '; errores: ' + (data.errors || 0) + '. Estado: ' + (data.status || 'en curso') + (data.in_flight ? ' (petición en curso)' : '') + '.', total ? (done / total) * 100 : 0);
+    }
+    function startCleanup(resume) {
+        var d = $.Deferred();
+        var start = function () {
+            cleanupRun = runOffsetBatches({
+                prepareAction: resume ? null : 'taisa_imgopt_prepare_cleanup',
+                batchAction: 'taisa_imgopt_cleanup_batch', limit: 5, singleStep: true, delay: 3000,
+                onBatch: function (batch) {
+                    cleanupProgress(batch);
+                    if (batch.status === 'paused' || batch.status === 'cancelled' || batch.done) { cleanupRun = null; d.resolve(batch); return; }
+                    setTimeout(function () { if (cleanupRun && !cleanupRun.isPaused()) cleanupRun.resume(); }, 3000);
+                }
+            });
+            cleanupRun.done(d.resolve).fail(d.reject);
+        };
+        if (resume) { start(); }
+        else { start(); }
+        return d.promise();
+    }
+
+    function loadCleanupStatus() {
+        ajax('taisa_imgopt_cleanup_status').done(function (r) {
+            if (r.success && r.data.status !== 'none') {
+                var current = r.data;
+                cleanupProgress(current);
+                if (current.status === 'running') {
+                    if (current.in_flight) {
+                        setProgress('Hay una petición de limpieza en curso. Esperando su respuesta antes de enviar otro lote…', 0);
+                        setTimeout(loadCleanupStatus, 2000);
+                    } else { startCleanup(true).fail(function (error) { setProgress(getErrorMessage(error), 0); }); }
+                }
+            }
+        });
+    }
+    loadCleanupStatus();
+
+    $(document).on('click', '[data-taisa-cleanup-control]', function () {
+        var command = $(this).data('taisa-cleanup-control');
+        if (command === 'cancel' && !window.confirm('¿Cancelar y abandonar esta limpieza? Los archivos ya borrados no se restauran.')) { return; }
+        if (command === 'pause' && cleanupRun && cleanupRun.pause) { cleanupRun.pause(); }
+        ajax('taisa_imgopt_cleanup_control', { command: command }).done(function (r) {
+            if (!r.success) { setProgress(getErrorMessage(r), 0); return; }
+            if (command === 'resume') { startCleanup(true).fail(function (error) { setProgress(getErrorMessage(error), 0); }); }
+            else { setProgress(command === 'pause' ? 'Pausa solicitada. La petición en curso terminará; no se enviarán nuevos lotes.' : 'Cancelación solicitada. La petición en curso terminará antes de abandonar el trabajo.', 0); }
+            if (command !== 'resume') { loadCleanupStatus(); }
+        }).fail(function (r) { setProgress(getErrorMessage(r), 0); });
+    });
 
     function runUsageScan() {
         var deferred = $.Deferred();
@@ -310,11 +370,7 @@
 
             runner = function () {
                 setProgress(TaisaImgOpt.strings.working, 0);
-                return runOffsetBatches({
-                    prepareAction: 'taisa_imgopt_prepare_cleanup',
-                    batchAction: 'taisa_imgopt_cleanup_batch',
-                    doneMessage: TaisaImgOpt.strings.done
-                });
+                return startCleanup(false);
             };
         }
 
@@ -345,4 +401,3 @@
             });
     });
 })(jQuery);
-
